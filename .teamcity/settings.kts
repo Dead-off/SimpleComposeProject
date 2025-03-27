@@ -1,4 +1,7 @@
 import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.buildFeatures.perfmon
+import jetbrains.buildServer.configs.kotlin.buildSteps.gradle
+import jetbrains.buildServer.configs.kotlin.triggers.vcs
 
 /*
 The settings script is an entry point for defining a TeamCity
@@ -25,4 +28,106 @@ To debug in IntelliJ Idea, open the 'Maven Projects' tool window (View
 version = "2025.03"
 
 project {
+    // Use DslContext.settingsRoot as VCS root
+    val vcsRoot = DslContext.settingsRoot
+
+    // Build configuration for desktop application
+    val buildDesktopApp = buildType {
+        id("BuildDesktopApp")
+        name = "Build Desktop Application"
+
+        vcs {
+            root(vcsRoot)
+        }
+
+        steps {
+            gradle {
+                name = "Build Desktop Application"
+                tasks = "composeApp:packageDistributionForCurrentOS"
+                useGradleWrapper = true
+            }
+        }
+
+        triggers {
+            vcs {
+                branchFilter = "+:*"
+            }
+        }
+
+        features {
+            perfmon {}
+        }
+
+        artifactRules = """
+            composeApp/build/compose/binaries/main/app/*/+:desktop-app
+            composeApp/build/compose/binaries/main/dmg/+:desktop-app/dmg
+            composeApp/build/compose/binaries/main/msi/+:desktop-app/msi
+            composeApp/build/compose/binaries/main/deb/+:desktop-app/deb
+        """.trimIndent()
+    }
+
+    // Build configuration for web application
+    val buildWebApp = buildType {
+        id("BuildWebApp")
+        name = "Build Web Application"
+
+        vcs {
+            root(vcsRoot)
+        }
+
+        steps {
+            gradle {
+                name = "Build Web Application"
+                tasks = "composeApp:wasmJsBrowserDistribution"
+                useGradleWrapper = true
+            }
+        }
+
+        triggers {
+            vcs {
+                branchFilter = "+:*"
+            }
+        }
+
+        features {
+            perfmon {}
+        }
+
+        artifactRules = """
+            composeApp/build/dist/wasmJs/productionExecutable/+:web-app
+        """.trimIndent()
+    }
+
+    // Build all configuration
+    buildType {
+        id("BuildAll")
+        name = "Build All"
+
+        vcs {
+            root(vcsRoot)
+        }
+
+        steps {
+            gradle {
+                name = "Build All"
+                tasks = "build"
+                useGradleWrapper = true
+            }
+        }
+
+        triggers {
+            vcs {
+                branchFilter = "+:*"
+            }
+        }
+
+        features {
+            perfmon {}
+        }
+
+        dependencies {
+            snapshot(buildDesktopApp) {}
+            snapshot(buildWebApp) {}
+        }
+    }
 }
